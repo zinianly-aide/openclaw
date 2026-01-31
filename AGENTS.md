@@ -13,6 +13,7 @@
   - Core channel docs: `docs/channels/`
   - Core channel code: `src/telegram`, `src/discord`, `src/slack`, `src/signal`, `src/imessage`, `src/web` (WhatsApp web), `src/channels`, `src/routing`
   - Extensions (channel plugins): `extensions/*` (e.g. `extensions/msteams`, `extensions/matrix`, `extensions/zalo`, `extensions/zalouser`, `extensions/voice-call`)
+- Gateway architecture: `src/gateway` is the WebSocket control plane; `src/gateway/server.ts` is the WS server, `src/gateway/client.ts` is the client. Protocol definitions in `src/gateway/protocol/`. The Gateway is NOT an HTTP server — it's a bidirectional WS control plane for sessions, config, tools, and events.
 - When adding channels/extensions/apps/docs, review `.github/labeler.yml` for label coverage.
 
 ## Docs Linking (Mintlify)
@@ -48,6 +49,14 @@
 - Lint/format: `pnpm lint` (oxlint), `pnpm format` (oxfmt)
 - Tests: `pnpm test` (vitest); coverage: `pnpm test:coverage`
 
+## Termux/Android Considerations
+- The `openclaw.mjs` entrypoint uses pre-built `dist/` JavaScript; it does NOT use `@typescript/native-preview` (tsgo) which doesn't support Android.
+- Use `./termux-run.sh` wrapper or `node openclaw.mjs` to run CLI commands on Termux.
+- Some native modules are stubbed: clipboard (`@mariozechner/clipboard-android-arm64`), canvas (`@napi-rs/canvas`), Matrix crypto (`@matrix-org/matrix-sdk-crypto-nodejs`).
+- After `pnpm install`, run `bash scripts/patch-termux.sh` to recreate native module stubs if needed.
+- Core functionality works on Termux: WhatsApp, Telegram, Discord, Slack, Signal, agent runtime, WebChat.
+- See `TERMUX.md` for full Termux-specific documentation and troubleshooting.
+
 ## Coding Style & Naming Conventions
 - Language: TypeScript (ESM). Prefer strict typing; avoid `any`.
 - Formatting/linting via Oxlint and Oxfmt; run `pnpm lint` before commits.
@@ -64,10 +73,12 @@
 ## Testing Guidelines
 - Framework: Vitest with V8 coverage thresholds (70% lines/branches/functions/statements).
 - Naming: match source names with `*.test.ts`; e2e in `*.e2e.test.ts`.
+- Run single test file: `vitest run <path-to-test-file>` or `pnpm vitest run <path-to-test-file>`.
+- Watch mode for specific test: `vitest <path-to-test-file>`.
 - Run `pnpm test` (or `pnpm test:coverage`) before pushing when you touch logic.
 - Do not set test workers above 16; tried already.
 - Live tests (real keys): `CLAWDBOT_LIVE_TEST=1 pnpm test:live` (OpenClaw-only) or `LIVE=1 pnpm test:live` (includes provider live tests). Docker: `pnpm test:docker:live-models`, `pnpm test:docker:live-gateway`. Onboarding Docker E2E: `pnpm test:docker:onboard`.
-- Full kit + what’s covered: `docs/testing.md`.
+- Full kit + what's covered: `docs/testing.md`.
 - Pure test additions/fixes generally do **not** need a changelog entry unless they alter user-facing behavior or the user asks for one.
 - Mobile: before using a simulator, check for connected real devices (iOS + Android) and prefer them when available.
 
@@ -105,6 +116,12 @@
 
 ## Troubleshooting
 - Rebrand/migration issues or legacy config/service warnings: run `openclaw doctor` (see `docs/gateway/doctor.md`).
+
+## Protocol & Gateway Architecture
+- Gateway protocol: TypeScript schema in `src/gateway/protocol/`, generated JSON schema at `dist/protocol.schema.json`.
+- Swift protocol generation: `pnpm protocol:gen:swift` generates `apps/macos/Sources/OpenClawProtocol/GatewayModels.swift` for the macOS app.
+- Protocol check: `pnpm protocol:check` verifies protocol generation is up-to-date (fails CI if out of sync).
+- Gateway WebSocket is the central control plane — all clients (CLI, macOS app, iOS/Android nodes, WebChat) connect via WS to `ws://127.0.0.1:18789` (default).
 
 ## Agent-Specific Notes
 - Vocabulary: "makeup" = "mac app".
